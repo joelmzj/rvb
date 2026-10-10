@@ -236,18 +236,6 @@ jobs:
           git checkout -f main
           bash .github/scripts/build_exclude_from_archive.sh
 
-      - name: Upload to release (Archive)
-        id: archive_upload
-        if: steps.no_change.outputs.HAS_NEW_FILES == 'true'
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ steps.context.outputs.ARCHIVE_TAG }}
-          RELEASE_TARGET: main
-          UPLOAD_FILES: "./build/*"
-          GITHUB_REPOSITORY: ${{ github.repository }}
-        run: bash .github/scripts/build_upload_release.sh
-
       - name: Merge published content hashes into state
         id: merge_hashes
         if: steps.no_change.outputs.HAS_NEW_FILES == 'true' && steps.archive_upload.outcome != 'failure'
