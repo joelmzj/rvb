@@ -1,0 +1,30 @@
+name: Test & Debug
+
+on:
+  workflow_dispatch:
+    inputs:
+      config_file:
+        description: "Config to test"
+        required: true
+        default: "configs/config.manual.toml"
+        type: choice
+        options:
+          - "configs/config.manual.toml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Test GitHub API Connectivity (Ping)
+        run: |
+          echo "Probando conexión con la API de GitHub..."
+          curl -s -o /dev/null -w "HTTP Status: %{http_code}\n" https://api.github.com/repos/anddea/revanced-patches/releases
+
+      - name: Validate TOML Configuration
+        run: |
+          echo "Verificando validez del archivo TOML..."
+          sudo apt-get install -y jq yq >/dev/null 2>&1 || true
+          yq eval . "${{ inputs.config_file }}" > /dev/null && echo "¡El archivo TOML es válido!"
