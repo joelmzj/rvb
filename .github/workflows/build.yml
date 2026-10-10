@@ -42,19 +42,9 @@ jobs:
       contents: write
     runs-on: ubuntu-latest
     timeout-minutes: 120
-    # Performance tuning knobs — version-controlled here instead of repo
-    # variables (visible in PRs, survive forks, git history for the values).
     env:
-      # How many app builds run at the same time. 1 = one at a time (normal).
-      # Set to 2-4 to speed up builds (runner has 4 cores).
       PARALLEL_JOBS: "6"
-      # How many files upload at the same time.
       UPLOAD_CONCURRENCY: "12"
-      # Duplicate-build suppression: log measures and still publishes every
-      # artifact; enforce withholds an unchanged rebuild from the release and
-      # lets an all-unchanged run skip the publish chain (never an empty
-      # release - see docs/ci-pipelines.md). Flip to "enforce" only after the
-      # log runs showed zero false duplicates.
       RVB_DEDUP_MODE: "log"
     services:
       cf_solver:
@@ -76,15 +66,10 @@ jobs:
           submodules: true
 
       - name: Fetch configs & state (data branch)
-        # Materializes configs/ (human TOMLs + generated *_build.json) and
-        # state/ (watcher JSONs) — the data branch is their canonical home.
         run: bash .github/scripts/fetch_data_branch.sh
 
       - name: Resolve build context
         id: context
-        env:
-          TG_THREAD_STABLE: ${{ vars.TG_THREAD_STABLE }}
-          TG_THREAD_BETA: ${{ vars.TG_THREAD_BETA }}
         run: bash .github/scripts/build_resolve_context.sh "${{ inputs.config_file }}"
 
       - name: Install Bouncy Castle for BKS Keystore
@@ -157,20 +142,6 @@ jobs:
           set -euo pipefail
           bash scripts/build.sh "${{ steps.context.outputs.CONFIG_FILE }}"
 
-      - name: Report build failures
-        id: failure_report
-        if: always()
-        continue-on-error: true
-        env:
-          TG_TOKEN: ${{ secrets.TG_TOKEN }}
-          TG_CHAT_ID: "${{ vars.TG_CHAT_ID || '@rvb27' }}"
-          TG_THREAD_NOTIFY: "${{ vars.TG_THREAD_NOTIFY || '3031' }}"
-          APKS_REPO: "${{ vars.APKS_REPO || 'nullcpy/apks' }}"
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_SERVER_URL: ${{ github.server_url }}
-          GITHUB_RUN_ID: ${{ github.run_id }}
-        run: bash .github/scripts/build_report_failures.sh
-
       - name: Check whether anything needs publishing
         id: no_change
         env:
@@ -236,9 +207,6 @@ jobs:
 
       - name: Commit updated build and module update files
         if: steps.no_change.outputs.HAS_NEW_FILES == 'true' && steps.update_changelog.outputs.has_modules == 'true'
-        # Explicit staging (the auto-commit action's default would sweep in
-        # unrelated dirt): pointers listed by build_update_changelog.sh plus
-        # this build's changelog. Branch already checked out by that script.
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -264,56 +232,22 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ steps.context.outputs.ARCHIVE_TAG }}
-          # Assets only: no metadata field is named, so the archive releases keep
-          # the title, notes and pre-release badge written by hand while files are
-          # (re)uploaded with --clobber. Why: docs/decisions/0001-release-metadata-ownership.md
           RELEASE_TARGET: main
           UPLOAD_FILES: "./build/*"
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: bash .github/scripts/build_upload_release.sh
 
-      - name: Merge archive manifest into website branch
-        if: steps.no_change.outputs.HAS_NEW_FILES == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ARCHIVE_TAG: ${{ steps.context.outputs.ARCHIVE_TAG }}
-          BUILD_TAG: ${{ steps.version.outputs.NEXT_VER_CODE }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-        run: bash .github/scripts/merge_archive_branch.sh
-
       - name: Merge published content hashes into state
         id: merge_hashes
-        # Runs only when the upload chain got through: a fingerprint becomes
-        # authoritative precisely when its artifact is live. archive_upload is
-        # continue-on-error, so gate on its outcome too - a run whose assets
-        # never landed must not record hashes it did not publish.
         if: steps.no_change.outputs.HAS_NEW_FILES == 'true' && steps.archive_upload.outcome != 'failure'
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: bash .github/scripts/build_merge_hashes.sh
 
       - name: Commit artifact hashes to data branch
-        # Plumbing writer for state/build_content_hashes.json (and any other
-        # generated JSON this run legitimately touched). Runs only when the
-        # merge step actually changed the file. A failed data push is not
-        # fatal: the next run's fetch converges, the worst case is one
-        # redundant republish - never a wrong skip.
         if: always() && steps.merge_hashes.outputs.STATE_UPDATED == 'true'
         id: commit_hashes
         run: |
           DATA_COMMIT_MSG="chore: record artifact hashes for build ${{ steps.version.outputs.NEXT_VER_CODE }}" \
             bash .github/scripts/commit_data_branch.sh || \
             echo "::warning::Could not push artifact hashes to data (next run converges)"
-
-      - name: Notify telegram
-        if: steps.no_change.outputs.HAS_NEW_FILES == 'true'
-        env:
-          TG_TOKEN: ${{ secrets.TG_TOKEN }}
-          TG_CHAT_ID: "${{ vars.TG_CHAT_ID || '@rvb27' }}"
-          TG_CHAT_ID_BROADCAST: "${{ vars.TG_CHAT_ID_BROADCAST || '@rvb28' }}"
-          TG_THREAD_ID: ${{ steps.context.outputs.TG_THREAD_ID }}
-          TITLE_SUFFIX: ${{ steps.context.outputs.TITLE_SUFFIX }}
-          NEXT_VER_CODE: ${{ steps.version.outputs.NEXT_VER_CODE }}
-          GITHUB_SERVER_URL: ${{ github.server_url }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-        run: bash .github/scripts/build_notify_telegram.sh
