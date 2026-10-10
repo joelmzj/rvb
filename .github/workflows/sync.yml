@@ -1,0 +1,44 @@
+name: Sync with Upstream
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # Se ejecuta diariamente
+  workflow_dispatch:      # Permite ejecutarlo manualmente cuando quieras
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git identity
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+
+      - name: Sync main, data and update branches
+        run: |
+          git remote add upstream https://github.com/nullcpy/rvb.git
+          git fetch upstream
+
+          # Sincronizar main
+          git checkout main
+          git merge upstream/main --strategy-option theirs --allow-unrelated-histories --no-edit
+          git checkout HEAD -- .github/workflows/sync.yml || true
+          git push origin main
+
+          # Sincronizar data
+          git checkout data || git checkout -b data upstream/data
+          git merge upstream/data --strategy-option theirs --allow-unrelated-histories --no-edit
+          git push origin data
+
+          # Sincronizar update
+          git checkout update || git checkout -b update upstream/update
+          git merge upstream/update --strategy-option theirs --allow-unrelated-histories --no-edit
+          git push origin update
