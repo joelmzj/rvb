@@ -187,7 +187,7 @@ cp -f "$MODPATH/module.prop" "$MODPATH/module.prop.orig"
 
 MAINTAINER_FILE="$MODPATH/maintainer.txt"
 if [ -f "$MAINTAINER_FILE" ]; then MAINTAINER=$(cat "$MAINTAINER_FILE"); fi
-if [ -z "${MAINTAINER:-}" ]; then MAINTAINER="nullcpy (github.com/nullcpy/rvb)"; fi
+if [ -z "${MAINTAINER:-}" ]; then MAINTAINER="joelmzj (github.com/joelmzj/rvb)"; fi
 rm -f "$MAINTAINER_FILE"
 
 ui_print "* Done. No need to reboot."
