@@ -238,7 +238,7 @@ jobs:
 
       - name: Merge published content hashes into state
         id: merge_hashes
-        if: steps.no_change.outputs.HAS_NEW_FILES == 'true' && steps.archive_upload.outcome != 'failure'
+        if: steps.no_change.outputs.HAS_NEW_FILES == 'true'
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: bash .github/scripts/build_merge_hashes.sh
