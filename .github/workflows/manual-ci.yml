@@ -35,12 +35,3 @@ jobs:
     if: ${{ always() && needs.build_manual.result == 'success' }}
     uses: ./.github/workflows/cleanup.yml
     secrets: inherit
-
-  trigger_notify_failure:
-    needs: [build_manual]
-    if: ${{ failure() }}
-    uses: ./.github/workflows/notify.yml
-    with:
-      workflow_name: "Manual CI"
-      already_reported: ${{ needs.build_manual.outputs.reported_failures == 'true' }}
-    secrets: inherit
